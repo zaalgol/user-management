@@ -29,14 +29,14 @@ class TokenService:
         self.db = db
         self.token_repository = TokenRepository(db)
 
-    def create_access_token(self, user_id: str, expires_delta: timedelta = None):
+    async def create_access_token(self, user_id: str, expires_delta: timedelta = None):
         to_encode = {"sub": user_id, "type": "access"}
         expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=Config.ACCESS_TOKEN_EXPIRE_MINUTES))
         to_encode.update({"exp": expire})
         encoded_jwt = jwt.encode(to_encode, Config.ACCESS_TOKEN_SECRET_KEY, algorithm=Config.ALGORITHM)
         return encoded_jwt
 
-    def create_refresh_token(self, user_id: str, expires_delta: timedelta = None):
+    async def create_refresh_token(self, user_id: str, expires_delta: timedelta = None):
         token_id = str(uuid.uuid4())
         to_encode = {"sub": user_id, "type": "refresh", "jti": token_id}
         expire = datetime.now(UTC) + (expires_delta or timedelta(days=Config.REFRESH_TOKEN_EXPIRE_DAYS))
@@ -45,7 +45,7 @@ class TokenService:
         encoded_jwt = jwt.encode(to_encode, Config.REFRESH_TOKEN_SECRET_KEY, algorithm=Config.ALGORITHM)
 
         try:
-            self.token_repository.save_refresh_token(token_id, user_id, expire)
+            await self.token_repository.save_refresh_token(token_id, user_id, expire)
         except Exception as e:
             logger.error(f"Error saving refresh token for user {user_id}: {e}")
             raise HTTPException(status_code=500, detail="Internal server error")
@@ -79,7 +79,7 @@ class TokenService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-    def refresh_access_token(self, refresh_token: str):
+    async def refresh_access_token(self, refresh_token: str):
         payload = self.decode_token(refresh_token, expected_type="refresh")
         token_id = payload.get("jti")
         user_id = payload.get("sub")
@@ -87,16 +87,16 @@ class TokenService:
             logger.warning("Refresh token payload missing jti or sub.")
             raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
-        token_record = self.token_repository.get_refresh_token(token_id)
+        token_record = await self.token_repository.get_refresh_token(token_id)
         if not token_record or token_record['user_id'] != user_id:
             logger.warning("Refresh token not found or does not match user.")
             raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
         # Token rotation
-        self.token_repository.delete_refresh_token(token_id)
+        await self.token_repository.delete_refresh_token(token_id)
 
-        new_refresh_token = self.create_refresh_token(user_id)
-        access_token = self.create_access_token(user_id)
+        new_refresh_token = await self.create_refresh_token(user_id)
+        access_token = await self.create_access_token(user_id)
         return access_token, new_refresh_token
 
     async def extract_user_id_from_token(self, token: str, expected_type: str = "access"):

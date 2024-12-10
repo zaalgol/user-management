@@ -2,19 +2,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
 from pymongo import MongoClient
 import uvicorn
+import asyncio
 
-from configs.config import Config
-from services.init_service import InitService
-from router.api import router
-from logger_setup import setup_logger
+from src.configs.config import Config
+from src.services.init_service import InitService
+from src.router.api import router
+from src.logger_setup import setup_logger
 
 logger = setup_logger(__name__)
-
-def init_system(app: FastAPI):
-    logger.info("Seeding initial data.")
-    init_service = InitService(app)
-    init_service.seed_admin_user()
-    init_service.seed_quest_user()
 
 def generate_mongo_client():
     MONGODB_URI = Config.MONGODB_URI
@@ -44,12 +39,9 @@ def create_app():
     logger.info("Initializing MongoDB client.")
     app.state.db = generate_mongo_client()
 
-    # Seed initial data
-    init_system(app)
-
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"], # Could replaced by [your_frontend_domain]
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
@@ -57,6 +49,13 @@ def create_app():
 
     logger.info("Including main router.")
     app.include_router(router)
+
+    @app.on_event("startup")
+    async def startup_event():
+        logger.info("Seeding initial data.")
+        init_service = InitService(app)
+        await init_service.seed_admin_user()
+        await init_service.seed_quest_user()
 
     return app
 

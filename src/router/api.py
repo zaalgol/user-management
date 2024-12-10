@@ -35,12 +35,10 @@ async def get_current_user_id(
 ):
     token = None
     if authorization:
-        # Extract token from header
         scheme, _, param = authorization.partition(' ')
         if scheme.lower() == 'bearer':
             token = param
     if not token:
-        # Try to get token from query parameters
         token = request.query_params.get('Authorization')
     if not token:
         logger.info("No authentication token found.")
@@ -62,7 +60,7 @@ async def login(request: Request, user_service: UserService = Depends(get_user_s
     data = await request.json()
     email = data.get('email')
     password = data.get('password')
-    response = user_service.login(email, password)
+    response = await user_service.login(email, password)
     if response.status_code == 200:
         logger.info(f"User {email} logged in successfully.")
     else:
@@ -77,7 +75,7 @@ async def refresh_token(request: Request, token_service: TokenService = Depends(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Refresh token missing")
 
     try:
-        access_token, new_refresh_token = token_service.refresh_access_token(refresh_token)
+        access_token, new_refresh_token = await token_service.refresh_access_token(refresh_token)
         response = JSONResponse({"access_token": access_token})
         response.set_cookie(key="refresh_token", value=new_refresh_token, httponly=True, secure=True)
         logger.info("Refresh token successfully rotated.")
@@ -91,7 +89,7 @@ async def refresh_token(request: Request, token_service: TokenService = Depends(
 
 @router.post('/api/register/', status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserCreate, user_service: UserService = Depends(get_user_service)):
-    user = user_service.create_user(user_data.email, user_data.password)
+    user = await user_service.create_user(user_data.email, user_data.password)
     if user is None:
         logger.warning(f"Attempted to register already existing user: {user_data.email}")
         raise HTTPException(status_code=400, detail="User already exists")
@@ -104,19 +102,16 @@ async def update_password(
     current_user_id: str = Depends(get_current_user_id),
     user_service: UserService = Depends(get_user_service)
 ):
-    # Get the user from DB
-    user = user_service.get_user_by_id(current_user_id)
+    user = await user_service.get_user_by_id(current_user_id)
     if not user:
         logger.warning(f"Attempted password update for non-existing user ID: {current_user_id}")
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Check current password
     if not user_service.validate_user_password(user, user_data.current_password):
         logger.warning(f"Incorrect current password for user ID: {current_user_id}")
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
-    # Update to new password
-    updated = user_service.update_user_password(current_user_id, user_data.new_password)
+    updated = await user_service.update_user_password(current_user_id, user_data.new_password)
     if updated:
         logger.info(f"Password updated successfully for user ID: {current_user_id}")
         return {"message": "Password updated successfully"}

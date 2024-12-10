@@ -1,7 +1,7 @@
 from bson import ObjectId
 from pymongo.database import Database
-
 from src.logger_setup import setup_logger
+from fastapi.concurrency import run_in_threadpool
 
 logger = setup_logger(__name__)
 
@@ -24,38 +24,51 @@ class UserRepository:
     def users_collection(self):
         return self.db['users']
     
-    def get_user_by_id(self, user_id):
+    async def get_user_by_id(self, user_id):
         try:
-            return self.users_collection.find_one({"_id": ObjectId(user_id), "isDeleted": {"$ne": True}})
+            return await run_in_threadpool(
+                self.users_collection.find_one,
+                {"_id": ObjectId(user_id), "isDeleted": {"$ne": True}}
+            )
         except Exception as e:
             logger.error(f"Error fetching user by id {user_id}: {e}")
             return None
 
-    def get_user_by_email(self, email):
+    async def get_user_by_email(self, email):
         try:
-            return self.users_collection.find_one({"email": email, "isDeleted": {"$ne": True}})
+            return await run_in_threadpool(
+                self.users_collection.find_one,
+                {"email": email, "isDeleted": {"$ne": True}}
+            )
         except Exception as e:
             logger.error(f"Error fetching user by email {email}: {e}")
             return None
 
-    def create_user(self, email, password):
+    async def create_user(self, email, password):
         try:
-            user_exists = self.users_collection.find_one({"email": email})
+            user_exists = await run_in_threadpool(
+                self.users_collection.find_one,
+                {"email": email}
+            )
             if user_exists:
                 return None  # Indicate user already exists
             user = {
                 "email": email,
                 "password": password
             }
-            result = self.users_collection.insert_one(user)
+            result = await run_in_threadpool(
+                self.users_collection.insert_one,
+                user
+            )
             return {"_id": result.inserted_id, **user}
         except Exception as e:
             logger.error(f"Exception creating user {email}: {e}")
             return None
 
-    def update_password(self, user_id, new_password):
+    async def update_password(self, user_id, new_password):
         try:
-            result = self.users_collection.update_one(
+            result = await run_in_threadpool(
+                self.users_collection.update_one,
                 {"_id": ObjectId(user_id), "isDeleted": {"$ne": True}},
                 {"$set": {"password": new_password}}
             )
