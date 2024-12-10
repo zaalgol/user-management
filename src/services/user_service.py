@@ -1,6 +1,5 @@
 from datetime import timedelta
 from fastapi.responses import JSONResponse
-from fastapi.concurrency import run_in_threadpool
 
 from src.repository.user_repository import UserRepository
 from src.services.hashing_service import PasswordHasher

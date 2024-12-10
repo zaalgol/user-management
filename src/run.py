@@ -1,9 +1,9 @@
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
-from pymongo import MongoClient
 import uvicorn
-import asyncio
 
+
+from motor.motor_asyncio import AsyncIOMotorClient
 from src.configs.config import Config
 from src.services.init_service import InitService
 from src.router.api import router
@@ -11,33 +11,25 @@ from src.logger_setup import setup_logger
 
 logger = setup_logger(__name__)
 
-def generate_mongo_client():
-    MONGODB_URI = Config.MONGODB_URI
-    try:
-        if int(Config.IS_MONGO_LOCAL):
-            mongo_client = MongoClient(MONGODB_URI)
-        else:
-            mongo_client = MongoClient(
-                MONGODB_URI,
-                tls=True,
-                retryWrites=False,
-                tlsCAFile=Config.CA_FILE,
-                socketTimeoutMS=60000,
-                connectTimeoutMS=60000
-            )
-        db = mongo_client['user-management-db']
-        return db
-    except Exception as e:
-        logger.error(f"Failed to create MongoDB client: {e}")
-        raise
-
 def create_app():
     app = FastAPI()
     app.state.config = Config
 
-    # Initialize MongoDB client and set it in app state
+    # Initialize MongoDB async client and set it in app state
     logger.info("Initializing MongoDB client.")
-    app.state.db = generate_mongo_client()
+    MONGODB_URI = Config.MONGODB_URI
+    if int(Config.IS_MONGO_LOCAL):
+        mongo_client = AsyncIOMotorClient(MONGODB_URI)
+    else:
+        mongo_client = AsyncIOMotorClient(
+            MONGODB_URI,
+            tls=True,
+            retryWrites=False,
+            tlsCAFile=Config.CA_FILE,
+            socketTimeoutMS=60000,
+            connectTimeoutMS=60000
+        )
+    app.state.db = mongo_client['user-management-db']
 
     app.add_middleware(
         CORSMiddleware,

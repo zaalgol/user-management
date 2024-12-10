@@ -33,13 +33,38 @@ async def get_current_user_id(
     authorization: str = Header(None),
     token_service: TokenService = Depends(get_token_service),
 ):
+    """
+    Extract and validate the current user's ID from the authorization header or query parameters.
+
+    This dependency function attempts to retrieve a bearer token from the request's `Authorization` header,
+    falling back to the `Authorization` query parameter if not found. If no token is provided, it returns an
+    HTTP 401 Unauthorized error. If a token is found, it uses the `TokenService` to extract and validate the
+    user's ID. If the token is invalid or expired, an HTTP 401 error is raised.
+
+    Args:
+        request (Request): The incoming request, used to access query parameters.
+        authorization (str): The authorization header value (e.g., "Bearer <token>").
+        token_service (TokenService): The service used to decode and validate the token.
+
+    Returns:
+        str: The user ID extracted from the valid token.
+
+    Raises:
+        HTTPException: If no token is provided or if token validation fails.
+    """
     token = None
+
+    # Attempt to extract the token from the Authorization header
     if authorization:
         scheme, _, param = authorization.partition(' ')
         if scheme.lower() == 'bearer':
             token = param
+
+    # If no token in header, try the 'Authorization' query parameter
     if not token:
         token = request.query_params.get('Authorization')
+
+    # If still no token, raise an authentication error
     if not token:
         logger.info("No authentication token found.")
         raise HTTPException(
@@ -47,6 +72,8 @@ async def get_current_user_id(
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Validate the token and extract the user ID via the token service
     return await token_service.extract_user_id_from_token(token)
 
 class DateTimeEncoder(json.JSONEncoder):
