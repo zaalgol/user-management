@@ -1,0 +1,6 @@
+.venv
+.vscode
+.env
+*.pyc
+user_management.egg-info
+.pytest_cache
